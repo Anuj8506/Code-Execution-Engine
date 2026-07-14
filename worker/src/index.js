@@ -2,6 +2,16 @@ const { Kafka } = require('kafkajs');
 const fs = require('fs');
 const path = require('path');
 const { execSync } = require('child_process');
+require('dotenv').config();
+const mysql = require('mysql2/promise');
+
+const pool = mysql.createPool({
+    host: process.env.MYSQL_HOST,
+    user: process.env.MYSQL_USER,
+    password: process.env.MYSQL_PASSWORD,
+    database: process.env.MYSQL_DATABASE,
+    port: process.env.MYSQL_PORT
+});
 
 const LANGUAGE_CONFIG = {
     python: {
@@ -51,6 +61,15 @@ const executeCode = (submissionId, language, code) => {
   return output;
 };
 
+const saveResult = async (submissionId, language, code, output, status) => {
+    const query = `
+        INSERT INTO submissions (submission_id, language, code, output, status)
+        VALUES (?, ?, ?, ?, ?)
+    `;
+    await pool.execute(query, [submissionId, language, code, output, status]);
+    console.log(`Result saved to DB — ${submissionId} — ${status}`);
+};
+
 const kafka = new Kafka({
   clientId: 'worker',
   brokers: ['localhost:9092']
@@ -73,9 +92,11 @@ const run = async () => {
       try {
         const output = executeCode(submission.submissionId, submission.language, submission.code);
         console.log('Output:', output);
-      } catch (err) {
+        await saveResult(submission.submissionId, submission.language, submission.code, output, 'success');
+     }catch (err) {
         console.error('Execution failed:', err.message);
-      }
+        await saveResult(submission.submissionId, submission.language, submission.code, err.message, 'error');
+        }
     }
   });
 };
