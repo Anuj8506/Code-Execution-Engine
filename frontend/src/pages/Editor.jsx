@@ -87,7 +87,7 @@ function Editor() {
               disabled={isRunning}
               className="bg-green-500 hover:bg-green-400 disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-semibold text-sm px-4 py-1 rounded"
             >
-              {isRunning ? 'Executing...' : 'Run Code'}
+              {isRunning ? 'Running...' : 'Run Code'}
             </button>
           </div>
 
