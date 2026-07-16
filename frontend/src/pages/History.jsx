@@ -30,7 +30,7 @@ function History() {
         {/* Content */}
         <div className="p-6">
             {loading ? (
-            <p className="text-gray-400">Loading submissions...</p>
+            <p className="text-gray-400">Fetching submissions...</p>
             ) : (
             <table className="w-full text-sm">
                 <thead>
