@@ -5,6 +5,7 @@ const { spawn } = require('child_process');
 require('dotenv').config();
 const mysql = require('mysql2/promise');
 const { WebSocketServer } = require('ws');
+const EXECUTION_TIMEOUT_MS = 10000;
 
 const pool = mysql.createPool({
     host: process.env.MYSQL_HOST,
@@ -76,26 +77,42 @@ const executeCode = (submissionId, language, code, input , onData) => {
 
         const execute = async () => {
             const forwardPath = tempDir.replace(/\\/g, '/');
-            // Write input to a file
             fs.writeFileSync(path.join(tempDir, 'input.txt'), input || '');
 
-            if (config.compileCmd) {
+            const containerName = `sandbox-${submissionId}`;
+            let timeoutHandle;
+
+            try {
+                if (config.compileCmd) {
+                    await runDockerCmd([
+                        'run', '--rm', '--memory=128m', '--cpus=0.5', '--network', 'none',
+                        '-v', `${forwardPath}:/code`,
+                        config.image,
+                        'sh', '-c', config.compileCmd
+                    ]);
+                }
+
+                timeoutHandle = setTimeout(() => {
+                    spawn('docker', ['kill', containerName]);
+                }, EXECUTION_TIMEOUT_MS);
+
                 await runDockerCmd([
-                    'run', '--rm', '--memory=128m', '--cpus=0.5', '--network', 'none',
+                    'run', '--rm', '--name', containerName,
+                    '--memory=128m', '--cpus=0.5', '--network', 'none',
                     '-v', `${forwardPath}:/code`,
                     config.image,
-                    'sh', '-c', config.compileCmd
-                ]); 
-            }
+                    'sh', '-c', `${config.runCmd} < /code/input.txt`
+                ]);
 
-            await runDockerCmd([
-                'run', '--rm', '--memory=128m', '--cpus=0.5', '--network', 'none',
-                '-v', `${forwardPath}:/code`,
-                config.image,
-                'sh', '-c', `${config.runCmd} < /code/input.txt`
-            ]);
-            fs.rmSync(tempDir, { recursive: true, force: true });
-            resolve(fullOutput);
+                clearTimeout(timeoutHandle);
+                resolve(fullOutput);
+            } catch (err) {
+                clearTimeout(timeoutHandle);
+                const isTimeout = err.message.includes('137');
+                reject(new Error(isTimeout ? 'Time limit exceeded' : err.message));
+            } finally {
+                fs.rmSync(tempDir, { recursive: true, force: true });
+            }
         };
 
         execute().catch(reject);

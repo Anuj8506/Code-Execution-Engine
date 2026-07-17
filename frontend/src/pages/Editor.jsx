@@ -38,9 +38,10 @@ function Editor() {
         setStatus('success')
         ws.close()
       } else if (message.type === 'error') {
-        setIsRunning(false)
-        setStatus('error')
-        ws.close()
+          setIsRunning(false)
+          setStatus('error')
+          setOutput((prev) => [...prev, message.data])
+          ws.close()
       }
     }
 
